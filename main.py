@@ -70,7 +70,7 @@ async def seed_admin(body: CreateAdminRequest, session: AsyncSession = Depends(g
             raise HTTPException(status_code=400, detail="Email already registered")
 
         user = await create_user(session, body.username, body.email, body.password, role="admin")
-        return {"id": user.id, "username": user.username, "role": user.role}
+        return user
     except HTTPException:
         raise
     except RuntimeError as e:
