@@ -7,7 +7,7 @@ from crud.transaction import (
     get_dashboard_summary, get_category_summary, get_monthly_trends,
     get_recent_activity,
 )
-from schemas.transaction import TransactionResponse, DashboardSummary
+from schemas.transaction import TransactionResponse, UserDashboardSummary, AdminDashboardSummary
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
@@ -53,7 +53,7 @@ async def all_transactions(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/summary", response_model=DashboardSummary)
+@router.get("/summary", response_model=UserDashboardSummary)
 async def my_summary(session: SessionDep, current_user: CurrentUser):
     try:
         return await get_dashboard_summary(session, user_id=current_user.id)
@@ -61,7 +61,7 @@ async def my_summary(session: SessionDep, current_user: CurrentUser):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/summary/all", response_model=DashboardSummary, dependencies=[Depends(require_role("admin"))])
+@router.get("/summary/all", response_model=AdminDashboardSummary, dependencies=[Depends(require_role("admin"))])
 async def full_summary(session: SessionDep):
     try:
         return await get_dashboard_summary(session, user_id=None)

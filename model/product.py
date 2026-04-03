@@ -23,7 +23,7 @@ class Product(SQLModel, table=True):
     name: str = Field(unique=True, index=True)
     description: str = Field(max_length=255)
     price: float
-    category_id: int | None = Field(default=None, foreign_key="category.id", index=True)
+    category_id: int | None = Field(default=None, foreign_key="category.id", ondelete="CASCADE", index=True)
 
     category: Optional["Category"] = Relationship(back_populates="products")
     reviews: list["Review"] = Relationship(
@@ -44,8 +44,8 @@ class Review(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     text: str
     rating: int
-    user_id: int = Field(foreign_key="user.id", index=True)
-    product_id: int = Field(foreign_key="product.id")
+    user_id: int = Field(foreign_key="user.id", ondelete="CASCADE", index=True)
+    product_id: int = Field(foreign_key="product.id", ondelete="CASCADE")
 
     user: "User" = Relationship(back_populates="reviews")
     product: "Product" = Relationship(back_populates="reviews")

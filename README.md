@@ -10,7 +10,7 @@ A FastAPI-based REST API with JWT authentication, RBAC, cursor-based pagination,
 - **Alembic** — database migrations
 - **SlowAPI** — rate limiting
 - **python-jose** — JWT tokens
-- **passlib** — password hashing
+- **passlib[bcrypt]** — password hashing
 
 ---
 
@@ -22,6 +22,7 @@ A FastAPI-based REST API with JWT authentication, RBAC, cursor-based pagination,
 ├── core/
 │   ├── config.py             # settings (DATABASE_URL, SECRET_KEY, etc.)
 │   ├── db.py                 # async engine & session
+│   ├── dependencies.py       # Annotated deps (SessionDep, CurrentUser, AdminDep)
 │   ├── security.py           # JWT, password hashing, RBAC
 │   └── exceptions.py         # global error handler + integrity error parser
 ├── crud/
@@ -104,8 +105,8 @@ DATABASE_URL=postgresql+asyncpg://user:password@localhost/dbname
 
 | Role | Permissions |
 |---|---|
-| `user` | Browse products, manage own cart, place orders, leave reviews, view own dashboard |
-| `admin` | Everything + manage users, products, categories, all orders, full dashboard |
+| `user` | Browse products, manage own cart, place orders, cancel own pending orders, leave reviews, view own dashboard |
+| `admin` | Everything + manage users, products, categories, confirm/cancel any order, full dashboard |
 
 ---
 
@@ -131,7 +132,7 @@ DATABASE_URL=postgresql+asyncpg://user:password@localhost/dbname
 ### Products
 | Method | Endpoint | Auth | Description |
 |---|---|---|---|
-| GET | `/products/` | Any | List products (paginated) |
+| GET | `/products/` | Any | List products (paginated, filterable by category_id) |
 | GET | `/products/{id}` | Any | Get single product |
 | POST | `/products/` | Admin | Create product |
 | PATCH | `/products/{id}` | Admin | Update product |
@@ -162,60 +163,91 @@ DATABASE_URL=postgresql+asyncpg://user:password@localhost/dbname
 | GET | `/orders/` | Any | View own orders (paginated) |
 | GET | `/orders/all` | Admin | View all orders (paginated) |
 | GET | `/orders/{id}` | Owner or Admin | Order detail with items |
+| PATCH | `/orders/{id}/cancel` | Owner | Cancel own pending order |
+| PATCH | `/orders/{id}/status` | Admin | Set order status (confirmed / cancelled) |
 
 ### Dashboard
 | Method | Endpoint | Auth | Description |
 |---|---|---|---|
 | GET | `/dashboard/transactions` | Any | Own transactions (with filters) |
 | GET | `/dashboard/transactions/all` | Admin | All transactions (with filters) |
-| GET | `/dashboard/summary` | Any | Own income, expense, net balance |
-| GET | `/dashboard/summary/all` | Admin | Full system summary |
+| GET | `/dashboard/summary` | Any | Own spending summary |
+| GET | `/dashboard/summary/all` | Admin | Store revenue breakdown |
 | GET | `/dashboard/by-category` | Any | Own category-wise totals |
 | GET | `/dashboard/by-category/all` | Admin | Full category-wise totals |
-| GET | `/dashboard/trends` | Any | Own monthly trends |
+| GET | `/dashboard/trends` | Any | Own monthly spending trends |
 | GET | `/dashboard/trends/all` | Admin | Full monthly trends |
-| GET | `/dashboard/recent` | Any | Own recent activity |
-| GET | `/dashboard/recent/all` | Admin | All recent activity |
+| GET | `/dashboard/recent` | Any | Own recent transactions |
+| GET | `/dashboard/recent/all` | Admin | All recent transactions |
 
 ---
 
-## Business Rules
+## Order Flow
 
-- A user can only submit **one review per product**
-- A product can only appear **once per cart**
-- Checkout creates an **Order + Transaction** automatically and clears the cart
-- **Transactions are immutable** — no update or delete. A reversal transaction can be created to offset incorrect entries
-- Deleting a category also deletes all its products (CASCADE)
-- Deleting a product also deletes all its reviews (CASCADE)
-- Deleting a user also deletes all their data (CASCADE)
-- Deactivated users get `403` on login
-- Only review owner or admin can delete a review
-
----
-
-## Pagination
-
-All list endpoints use **cursor-based pagination** — stable even when records are added or deleted.
-
-```bash
-GET /products/              # first page
-GET /products/?cursor=42    # next page using next_cursor from previous response
+```
+1. User adds products to cart
+2. User POST /orders/checkout → Order created (status: pending) + expense transaction recorded
+3. Admin reviews pending orders via GET /orders/all
+4. Admin PATCH /orders/{id}/status → {"status": "confirmed"}
+5. User can cancel pending order via PATCH /orders/{id}/cancel
 ```
 
-Response format:
+---
+
+## Dashboard Summary
+
+**User `GET /dashboard/summary`:**
 ```json
 {
-  "data": [...],
-  "next_cursor": 42,
-  "has_more": true
+  "total_expense": 1500.0,
+  "total_orders": 1
+}
+```
+
+**Admin `GET /dashboard/summary/all`:**
+```json
+{
+  "total_revenue": 2000.0,
+  "pending_amount": 1000.0,
+  "cancelled_amount": 500.0,
+  "total_orders": 3
 }
 ```
 
 ---
 
-## Dashboard Filters
+## Business Rules
 
-Transaction endpoints support query param filters:
+- One review per user per product
+- One product can appear once per cart
+- Checkout creates an Order + expense Transaction, clears the cart
+- Transactions are immutable — no update or delete
+- Only pending orders can be cancelled by the user
+- Deleting a category cascades to its products
+- Deleting a product cascades to its reviews
+- Deleting a user cascades to all their data
+- Deactivated users get `403` on login
+
+---
+
+## Pagination
+
+Cursor-based pagination on all list endpoints:
+
+```bash
+GET /products/                        # first page
+GET /products/?cursor=42&limit=10     # next page
+GET /products/?category_id=3          # filter by category
+```
+
+Response:
+```json
+{ "data": [...], "next_cursor": 42, "has_more": true }
+```
+
+---
+
+## Transaction Filters
 
 ```bash
 GET /dashboard/transactions?type=expense
@@ -227,16 +259,17 @@ GET /dashboard/transactions?date_from=2026-01-01&date_to=2026-03-31
 
 ## Error Handling
 
-| Situation | Status | Example |
-|---|---|---|
-| Duplicate name/email | `400` | "A record with this name already exists." |
-| Already reviewed | `400` | "You have already reviewed this product." |
-| Empty cart checkout | `400` | "Your cart is empty." |
-| Invalid ID | `404` | "Product not found." |
-| No permission | `403` | "You are not allowed to delete this review." |
-| Deactivated account | `403` | "Account is deactivated." |
-| Wrong credentials | `401` | "Invalid username or password." |
-| DB/server error | `500` | "Failed to create product. Please try again." |
+| Situation | Status |
+|---|---|
+| Duplicate name/email | `400` |
+| Already reviewed | `400` |
+| Empty cart checkout | `400` |
+| Cancel non-pending order | `400` |
+| Invalid ID | `404` |
+| No permission | `403` |
+| Deactivated account | `403` |
+| Wrong credentials | `401` |
+| DB/server error | `500` |
 
 ---
 
@@ -245,42 +278,29 @@ GET /dashboard/transactions?date_from=2026-01-01&date_to=2026-03-31
 - Global: **100 requests/minute** per IP
 - `/` root: **10 requests/minute** per IP
 
-Returns `429 Too Many Requests` when exceeded.
-
----
-
-## Data Persistence
-
-SQLite with `aiosqlite` async driver. Foreign key enforcement enabled via `PRAGMA foreign_keys=ON`. Schema managed via Alembic migrations.
-
-To switch to PostgreSQL, update `DATABASE_URL` in `.env`:
-```env
-DATABASE_URL=postgresql+asyncpg://user:password@localhost/dbname
-```
-
 ---
 
 ## Alembic Migrations
 
 ```bash
-alembic upgrade head                              # apply all migrations
-alembic revision --autogenerate -m "description" # generate new migration
+alembic upgrade head                              # apply all
+alembic revision --autogenerate -m "description" # generate new
 alembic downgrade -1                              # rollback one step
-alembic current                                   # check current state
-alembic history                                   # view migration history
+alembic current                                   # check state
 ```
 
 ---
 
-## First Time Setup Flow
+## First Time Setup
 
 ```
-1. POST /seed-admin                → create first admin (no auth needed)
-2. POST /auth/login                → get admin JWT
-3. POST /products/categories       → create categories
-4. POST /products/                 → create products
-5. POST /auth/register             → register normal users
-6. POST /cart/                     → add products to cart
-7. POST /orders/checkout           → place order
-8. GET  /dashboard/summary         → view financial summary
+1. POST /seed-admin          → create first admin
+2. POST /auth/login          → get admin JWT
+3. POST /products/categories → create categories
+4. POST /products/           → create products
+5. POST /auth/register       → register users
+6. POST /cart/               → add to cart
+7. POST /orders/checkout     → place order
+8. PATCH /orders/{id}/status → admin confirms
+9. GET  /dashboard/summary   → view summary
 ```

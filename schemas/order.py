@@ -1,5 +1,10 @@
 from datetime import datetime
 from pydantic import BaseModel
+from model.enums import OrderStatus
+
+
+class OrderStatusUpdate(BaseModel):
+    status: OrderStatus  # confirmed / cancelled
 
 
 class OrderItemResponse(BaseModel):

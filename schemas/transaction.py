@@ -15,8 +15,13 @@ class TransactionResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
-class DashboardSummary(BaseModel):
-    total_income: float
+class UserDashboardSummary(BaseModel):
     total_expense: float
-    net_balance: float
-    total_transactions: int
+    total_orders: int
+
+
+class AdminDashboardSummary(BaseModel):
+    total_revenue: float
+    pending_amount: float
+    cancelled_amount: float
+    total_orders: int

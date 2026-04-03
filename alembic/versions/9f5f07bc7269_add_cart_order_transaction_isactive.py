@@ -25,7 +25,7 @@ def upgrade() -> None:
         sa.Column('status', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
         sa.Column('created_at', sa.DateTime(), nullable=False),
         sa.Column('user_id', sa.Integer(), nullable=False),
-        sa.ForeignKeyConstraint(['user_id'], ['user.id']),
+        sa.ForeignKeyConstraint(['user_id'], ['user.id'], ondelete='CASCADE'),
         sa.PrimaryKeyConstraint('id')
     )
     with op.batch_alter_table('order', schema=None) as batch_op:
@@ -36,8 +36,8 @@ def upgrade() -> None:
         sa.Column('quantity', sa.Integer(), nullable=False),
         sa.Column('user_id', sa.Integer(), nullable=False),
         sa.Column('product_id', sa.Integer(), nullable=False),
-        sa.ForeignKeyConstraint(['product_id'], ['product.id']),
-        sa.ForeignKeyConstraint(['user_id'], ['user.id']),
+        sa.ForeignKeyConstraint(['product_id'], ['product.id'], ondelete='CASCADE'),
+        sa.ForeignKeyConstraint(['user_id'], ['user.id'], ondelete='CASCADE'),
         sa.PrimaryKeyConstraint('id'),
         sa.UniqueConstraint('user_id', 'product_id', name='uq_cart_user_product')
     )
@@ -51,8 +51,8 @@ def upgrade() -> None:
         sa.Column('price_at_purchase', sa.Float(), nullable=False),
         sa.Column('order_id', sa.Integer(), nullable=False),
         sa.Column('product_id', sa.Integer(), nullable=False),
-        sa.ForeignKeyConstraint(['order_id'], ['order.id']),
-        sa.ForeignKeyConstraint(['product_id'], ['product.id']),
+        sa.ForeignKeyConstraint(['order_id'], ['order.id'], ondelete='CASCADE'),
+        sa.ForeignKeyConstraint(['product_id'], ['product.id'], ondelete='CASCADE'),
         sa.PrimaryKeyConstraint('id')
     )
     with op.batch_alter_table('orderitem', schema=None) as batch_op:
@@ -68,8 +68,8 @@ def upgrade() -> None:
         sa.Column('notes', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
         sa.Column('user_id', sa.Integer(), nullable=False),
         sa.Column('order_id', sa.Integer(), nullable=True),
-        sa.ForeignKeyConstraint(['order_id'], ['order.id']),
-        sa.ForeignKeyConstraint(['user_id'], ['user.id']),
+        sa.ForeignKeyConstraint(['order_id'], ['order.id'], ondelete='CASCADE'),
+        sa.ForeignKeyConstraint(['user_id'], ['user.id'], ondelete='CASCADE'),
         sa.PrimaryKeyConstraint('id')
     )
     with op.batch_alter_table('transaction', schema=None) as batch_op:

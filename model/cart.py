@@ -10,8 +10,8 @@ if TYPE_CHECKING:
 class CartItem(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     quantity: int = Field(default=1, ge=1)
-    user_id: int = Field(foreign_key="user.id", index=True)
-    product_id: int = Field(foreign_key="product.id", index=True)
+    user_id: int = Field(foreign_key="user.id", ondelete="CASCADE", index=True)
+    product_id: int = Field(foreign_key="product.id", ondelete="CASCADE", index=True)
 
     user: "User" = Relationship(back_populates="cart_items")
     product: "Product" = Relationship(back_populates="cart_items")
