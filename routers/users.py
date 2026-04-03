@@ -1,37 +1,50 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlmodel.ext.asyncio.session import AsyncSession
-from core.db import get_session
-from core.security import get_current_user, require_role
-from crud.user import get_all_users, delete_user, promote_to_admin
+from core.dependencies import SessionDep, CurrentUser
+from core.security import require_role
+from crud.user import get_all_users, delete_user, promote_to_admin, toggle_active
+from schemas.user import UserResponse
 
 router = APIRouter(prefix="/users", tags=["users"])
 
 
-@router.get("/me")
-async def me(current_user=Depends(get_current_user)):
-    return {"id": current_user.id, "username": current_user.username, "email": current_user.email, "role": current_user.role}
+@router.get("/me", response_model=UserResponse)
+async def me(current_user: CurrentUser):
+    return current_user
 
 
-@router.get("/", dependencies=[Depends(require_role("admin"))])
+@router.get("/", response_model=list[UserResponse], dependencies=[Depends(require_role("admin"))])
 async def list_users(
-    cursor: int = Query(0, ge=0, description="Last seen user ID, 0 for first page"),
+    session: SessionDep,
+    cursor: int = Query(0, ge=0),
     limit: int = Query(10, ge=1, le=100),
-    session: AsyncSession = Depends(get_session),
 ):
     try:
         items, next_cursor = await get_all_users(session, cursor=cursor, limit=limit)
-        return {"data": items, "next_cursor": next_cursor, "has_more": next_cursor is not None}
+        return items
     except RuntimeError as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.patch("/{user_id}/promote", dependencies=[Depends(require_role("admin"))])
-async def promote_user(user_id: int, session: AsyncSession = Depends(get_session)):
+@router.patch("/{user_id}/promote", response_model=UserResponse, dependencies=[Depends(require_role("admin"))])
+async def promote_user(user_id: int, session: SessionDep):
     try:
         user = await promote_to_admin(session, user_id)
         if not user:
             raise HTTPException(status_code=404, detail="User not found.")
-        return {"id": user.id, "username": user.username, "role": user.role}
+        return user
+    except HTTPException:
+        raise
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.patch("/{user_id}/toggle-active", response_model=UserResponse, dependencies=[Depends(require_role("admin"))])
+async def toggle_user_active(user_id: int, session: SessionDep):
+    try:
+        user = await toggle_active(session, user_id)
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found.")
+        return user
     except HTTPException:
         raise
     except RuntimeError as e:
@@ -39,7 +52,7 @@ async def promote_user(user_id: int, session: AsyncSession = Depends(get_session
 
 
 @router.delete("/{user_id}", dependencies=[Depends(require_role("admin"))])
-async def remove_user(user_id: int, session: AsyncSession = Depends(get_session)):
+async def remove_user(user_id: int, session: SessionDep):
     try:
         deleted = await delete_user(session, user_id)
         if not deleted:

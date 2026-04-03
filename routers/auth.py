@@ -1,23 +1,21 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
-from sqlmodel.ext.asyncio.session import AsyncSession
-from core.db import get_session
+from core.dependencies import SessionDep
 from core.security import verify_password, create_access_token, require_role
 from crud.user import get_user_by_username, get_user_by_email, create_user
-from schemas.user import RegisterRequest, CreateAdminRequest
+from schemas.user import RegisterRequest, CreateAdminRequest, UserResponse, TokenResponse
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
-@router.post("/register", status_code=201)
-async def register(body: RegisterRequest, session: AsyncSession = Depends(get_session)):
+@router.post("/register", status_code=201, response_model=UserResponse)
+async def register(body: RegisterRequest, session: SessionDep):
     try:
         if await get_user_by_username(session, body.username):
             raise HTTPException(status_code=400, detail="This username is already taken. Please choose another.")
         if await get_user_by_email(session, body.email):
             raise HTTPException(status_code=400, detail="An account with this email already exists.")
-        user = await create_user(session, body.username, body.email, body.password, role="user")
-        return {"id": user.id, "username": user.username, "role": user.role}
+        return await create_user(session, body.username, body.email, body.password, role="user")
     except HTTPException:
         raise
     except ValueError as e:
@@ -26,15 +24,14 @@ async def register(body: RegisterRequest, session: AsyncSession = Depends(get_se
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/register-admin", status_code=201, dependencies=[Depends(require_role("admin"))])
-async def register_admin(body: CreateAdminRequest, session: AsyncSession = Depends(get_session)):
+@router.post("/register-admin", status_code=201, response_model=UserResponse, dependencies=[Depends(require_role("admin"))])
+async def register_admin(body: CreateAdminRequest, session: SessionDep):
     try:
         if await get_user_by_username(session, body.username):
             raise HTTPException(status_code=400, detail="This username is already taken. Please choose another.")
         if await get_user_by_email(session, body.email):
             raise HTTPException(status_code=400, detail="An account with this email already exists.")
-        user = await create_user(session, body.username, body.email, body.password, role="admin")
-        return {"id": user.id, "username": user.username, "role": user.role}
+        return await create_user(session, body.username, body.email, body.password, role="admin")
     except HTTPException:
         raise
     except ValueError as e:
@@ -43,8 +40,8 @@ async def register_admin(body: CreateAdminRequest, session: AsyncSession = Depen
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/login")
-async def login(form: OAuth2PasswordRequestForm = Depends(), session: AsyncSession = Depends(get_session)):
+@router.post("/login", response_model=TokenResponse)
+async def login(session: SessionDep, form: OAuth2PasswordRequestForm = Depends()):
     try:
         user = await get_user_by_username(session, form.username)
         if not user or not verify_password(form.password, user.password):

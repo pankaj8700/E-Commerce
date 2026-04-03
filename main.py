@@ -9,7 +9,8 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from core.db import get_session
 from core.exceptions import internal_error_handler
 from routers import auth, users, products, reviews
-from schemas.user import CreateAdminRequest
+from routers import cart, orders, dashboard
+from schemas.user import CreateAdminRequest, UserResponse
 
 limiter = Limiter(key_func=get_remote_address, default_limits=["100/minute"])
 
@@ -32,6 +33,9 @@ app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(products.router)
 app.include_router(reviews.router)
+app.include_router(cart.router)
+app.include_router(orders.router)
+app.include_router(dashboard.router)
 
 
 @app.get("/")
@@ -40,7 +44,7 @@ async def root(request: Request):
     return {"message": "E-Commerce API is running"}
 
 
-@app.post("/seed-admin", tags=["admin-bootstrap"], status_code=201)
+@app.post("/seed-admin", tags=["admin-bootstrap"], status_code=201, response_model=UserResponse)
 async def seed_admin(body: CreateAdminRequest, session: AsyncSession = Depends(get_session)):
     """
     One-time endpoint to create the first admin user.
@@ -50,7 +54,7 @@ async def seed_admin(body: CreateAdminRequest, session: AsyncSession = Depends(g
     try:
         from crud.user import create_user, get_user_by_username, get_user_by_email
         from sqlmodel import select
-        from model.models import User
+        from model.user import User
 
         result = await session.exec(select(User).where(User.role == "admin"))
         if result.first():

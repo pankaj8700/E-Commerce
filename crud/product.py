@@ -1,18 +1,20 @@
-from typing import Optional, List, Tuple
+
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 from core.exceptions import parse_integrity_error
-from model.models import Product, Category
+from model.product import Product, Category
 
 
 async def get_all_products(
-    session: AsyncSession, cursor: int = 0, limit: int = 10
-) -> Tuple[List[Product], Optional[int]]:
+    session: AsyncSession, cursor: int = 0, limit: int = 10, category_id: int | None = None
+) -> tuple[list[Product], int | None]:
     try:
-        result = await session.exec(
-            select(Product).where(Product.id > cursor).order_by(Product.id).limit(limit)
-        )
+        query = select(Product).where(Product.id > cursor)
+        if category_id is not None:
+            query = query.where(Product.category_id == category_id)
+        query = query.order_by(Product.id).limit(limit)
+        result = await session.exec(query)
         items = result.all()
         next_cursor = items[-1].id if len(items) == limit else None
         return items, next_cursor
@@ -20,7 +22,7 @@ async def get_all_products(
         raise RuntimeError("Failed to fetch products. Please try again.") from e
 
 
-async def get_product_by_id(session: AsyncSession, product_id: int) -> Optional[Product]:
+async def get_product_by_id(session: AsyncSession, product_id: int) -> Product | None:
     try:
         return await session.get(Product, product_id)
     except SQLAlchemyError as e:
@@ -28,7 +30,7 @@ async def get_product_by_id(session: AsyncSession, product_id: int) -> Optional[
 
 
 async def create_product(
-    session: AsyncSession, name: str, description: str, price: float, category_id: Optional[int]
+    session: AsyncSession, name: str, description: str, price: float, category_id: int | None
 ) -> Product:
     try:
         product = Product(name=name, description=description, price=price, category_id=category_id)
@@ -44,7 +46,7 @@ async def create_product(
         raise RuntimeError("Failed to create product. Please try again.") from e
 
 
-async def update_product(session: AsyncSession, product_id: int, **kwargs) -> Optional[Product]:
+async def update_product(session: AsyncSession, product_id: int, **kwargs) -> Product | None:
     try:
         product = await session.get(Product, product_id)
         if not product:
@@ -78,7 +80,7 @@ async def delete_product(session: AsyncSession, product_id: int) -> bool:
 
 async def get_all_categories(
     session: AsyncSession, cursor: int = 0, limit: int = 10
-) -> Tuple[List[Category], Optional[int]]:
+) -> tuple[list[Category], int | None]:
     try:
         result = await session.exec(
             select(Category).where(Category.id > cursor).order_by(Category.id).limit(limit)
@@ -105,7 +107,7 @@ async def create_category(session: AsyncSession, name: str) -> Category:
         raise RuntimeError("Failed to create category. Please try again.") from e
 
 
-async def get_category_by_id(session: AsyncSession, category_id: int) -> Optional[Category]:
+async def get_category_by_id(session: AsyncSession, category_id: int) -> Category | None:
     try:
         return await session.get(Category, category_id)
     except SQLAlchemyError as e:

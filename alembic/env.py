@@ -9,7 +9,7 @@ from alembic import context
 from sqlmodel import SQLModel
 
 # Import all models so their metadata is registered
-import model.models  # noqa: F401
+import model  # noqa: F401 — triggers model/__init__.py which imports all models
 
 from core.config import settings
 

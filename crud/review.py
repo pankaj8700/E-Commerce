@@ -1,14 +1,14 @@
-from typing import Optional, List, Tuple
+
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 from core.exceptions import parse_integrity_error
-from model.models import Review
+from model.product import Review
 
 
 async def get_reviews_by_product(
     session: AsyncSession, product_id: int, cursor: int = 0, limit: int = 10
-) -> Tuple[List[Review], Optional[int]]:
+) -> tuple[list[Review], int | None]:
     try:
         result = await session.exec(
             select(Review)
@@ -23,14 +23,14 @@ async def get_reviews_by_product(
         raise RuntimeError("Failed to fetch reviews. Please try again.") from e
 
 
-async def get_review_by_id(session: AsyncSession, review_id: int) -> Optional[Review]:
+async def get_review_by_id(session: AsyncSession, review_id: int) -> Review | None:
     try:
         return await session.get(Review, review_id)
     except SQLAlchemyError as e:
         raise RuntimeError("Failed to fetch review. Please try again.") from e
 
 
-async def get_review_by_user_and_product(session: AsyncSession, user_id: int, product_id: int) -> Optional[Review]:
+async def get_review_by_user_and_product(session: AsyncSession, user_id: int, product_id: int) -> Review | None:
     try:
         result = await session.exec(
             select(Review).where(Review.user_id == user_id, Review.product_id == product_id)

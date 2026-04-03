@@ -1,13 +1,14 @@
-from typing import Optional, List, Tuple
+
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 from core.exceptions import parse_integrity_error
-from model.models import User, Role
+from model.user import User
+from model.enums import Role
 from core.security import hash_password
 
 
-async def get_user_by_username(session: AsyncSession, username: str) -> Optional[User]:
+async def get_user_by_username(session: AsyncSession, username: str) -> User | None:
     try:
         result = await session.exec(select(User).where(User.username == username))
         return result.first()
@@ -15,7 +16,7 @@ async def get_user_by_username(session: AsyncSession, username: str) -> Optional
         raise RuntimeError("Failed to fetch user. Please try again.") from e
 
 
-async def get_user_by_email(session: AsyncSession, email: str) -> Optional[User]:
+async def get_user_by_email(session: AsyncSession, email: str) -> User | None:
     try:
         result = await session.exec(select(User).where(User.email == email))
         return result.first()
@@ -23,7 +24,7 @@ async def get_user_by_email(session: AsyncSession, email: str) -> Optional[User]
         raise RuntimeError("Failed to fetch user. Please try again.") from e
 
 
-async def get_user_by_id(session: AsyncSession, user_id: int) -> Optional[User]:
+async def get_user_by_id(session: AsyncSession, user_id: int) -> User | None:
     try:
         return await session.get(User, user_id)
     except SQLAlchemyError as e:
@@ -32,7 +33,7 @@ async def get_user_by_id(session: AsyncSession, user_id: int) -> Optional[User]:
 
 async def get_all_users(
     session: AsyncSession, cursor: int = 0, limit: int = 10
-) -> Tuple[List[User], Optional[int]]:
+) -> tuple[list[User], int | None]:
     try:
         result = await session.exec(
             select(User).where(User.id > cursor).order_by(User.id).limit(limit)
@@ -75,7 +76,7 @@ async def delete_user(session: AsyncSession, user_id: int) -> bool:
         raise RuntimeError("Failed to delete user. Please try again.") from e
 
 
-async def promote_to_admin(session: AsyncSession, user_id: int) -> Optional[User]:
+async def promote_to_admin(session: AsyncSession, user_id: int) -> User | None:
     try:
         user = await session.get(User, user_id)
         if not user:
@@ -88,3 +89,18 @@ async def promote_to_admin(session: AsyncSession, user_id: int) -> Optional[User
     except SQLAlchemyError as e:
         await session.rollback()
         raise RuntimeError("Failed to promote user. Please try again.") from e
+
+
+async def toggle_active(session: AsyncSession, user_id: int) -> User | None:
+    try:
+        user = await session.get(User, user_id)
+        if not user:
+            return None
+        user.is_active = not user.is_active
+        session.add(user)
+        await session.commit()
+        await session.refresh(user)
+        return user
+    except SQLAlchemyError as e:
+        await session.rollback()
+        raise RuntimeError("Failed to update user status. Please try again.") from e
