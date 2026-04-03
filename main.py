@@ -17,6 +17,10 @@ limiter = Limiter(key_func=get_remote_address, default_limits=["100/minute"])
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    import subprocess
+    result = subprocess.run(["alembic", "upgrade", "head"], capture_output=True, text=True)
+    if result.returncode != 0:
+        raise RuntimeError(f"Migration failed: {result.stderr}")
     yield
 
 
